@@ -1,0 +1,2 @@
+PyYAML>=5.1
+# Add other libraries as needed (pymongo, flask, pytest, etc.)

@@ -1,0 +1,4 @@
+# Configuration for distributed-db-wrapper
+# db_uri can be set to sqlite:///<path> or mongodb://...
+
+db_uri: sqlite:///:memory:
