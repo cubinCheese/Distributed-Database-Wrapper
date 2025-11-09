@@ -10,4 +10,5 @@ __all__ = [
     "sharding",
     "db_interface",
     "utils",
+    "flexiraft",
 ]
