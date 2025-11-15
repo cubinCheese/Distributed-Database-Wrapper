@@ -1,7 +1,7 @@
 # DB blueprint
 
 ## Big Picture
-Dataset is sharded **Original Languages**:
+Dataset is sharded by **Original Languages**:
 1. Chinese (zh)
 2. Japanese (ja)
 3. Korean (ko)
