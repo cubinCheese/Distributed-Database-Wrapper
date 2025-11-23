@@ -80,7 +80,7 @@ def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopol
                 continue
             term_group_candidates[t][g][cand] += 1
 
-    def alg2(term_it: int, possible_leader_groups: Set[str]) -> Tuple[Alg2Status, int, List[LeaderRef]]:
+    def GetPotentialNextLeaders(term_it: int, possible_leader_groups: Set[str]) -> Tuple[Alg2Status, int, List[LeaderRef]]:
         # 1) WAITING: if any possible group still could reach a majority based on current responses
         counts = current_group_counts()
         for g in possible_leader_groups:
@@ -117,7 +117,7 @@ def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopol
         # If we examined all higher terms and found no leaders, treat as defunct.
         return Alg2Status.ALL_INTERMEDIATE_TERMS_DEFUNCT, -1, []
 
-    return alg2
+    return GetPotentialNextLeaders
 
 
 # Backwards-compatible name expected by earlier code / paper pseudocode
