@@ -1,0 +1,111 @@
+FlexiRaft Algorithm 2: Paper vs Practical Implementation
+======================================================
+
+Purpose
+-------
+Algorithm 2 in the FlexiRaft paper ("getPotentialNextLeaders" / Alg.2) is a subroutine
+used by the leader-election algorithm (Alg.1) to infer which groups may contain
+leaders at higher terms using partial vote information and historical voting
+records. The paper's pseudocode contains precise iterative rules for exploring
+intermediate terms, growing the set of "terminal groups", and when to stop and
+require a pessimistic (majority-in-every-group) check.
+
+This document summarizes the key semantic differences between the paper's
+verbatim Alg.2 and the practical, testable version implemented in
+`wrapper/flexiraft_helper.py` and why the differences matter.
+
+1) Stateful side-effects vs functional closure
+---------------------------------------------
+Paper:  Alg.2 in the pseudocode is described with side-effects: it updates
+        internal data structures (e.g. terminal groups) and may assume an
+        evolving global view across calls.
+
+Practical: The implementation produces a pure closure (`make_alg2_fn`) that
+           captures a fixed snapshot of `responses` and `topo` and returns one
+           of: WAITING_FOR_MORE_VOTES, POTENTIAL_NEXT_LEADERS_DETECTED, or
+           ALL_INTERMEDIATE_TERMS_DEFUNCT. Any "terminal groups" accumulation
+           is managed by the caller (`flexiraft_leader_election`) rather than
+           inside Alg.2.
+
+Significance:
+- Advantage: easier to reason about and test, no hidden global state; safe
+  to call repeatedly.
+- Tradeoff: the paper's stepwise mutation of shared state can encode optimiza-
+  tions and ordering assumptions that the closure-based approach must reify in
+  the caller. We replicate the paper semantics by returning potential leaders
+  and letting the caller update terminal groups.
+
+2) WAITING criteria (partial responses)
+----------------------------------------
+Paper:  Alg.2 precisely reasons about whether a majority in a candidate group
+        is still reachable given partially received votes and may have
+        additional timing/ordering considerations.
+
+Practical: We implement a conservative WAITING test: for each candidate group
+           passed in, if granted < majority but remaining non-respondents
+           could still supply enough votes to reach majority, return WAITING.
+
+Significance:
+- Advantage: simple, conservative — avoids false-positive leader inferences.
+- Tradeoff: more conservative than the paper in some corner cases where more
+  nuanced message ordering or historical data could safely rule out WAITING.
+
+3) Historical-term scanning
+---------------------------
+Paper:  Alg.2 walks intermediate terms and uses voter histories to locate the
+        highest-term leader candidates. The pseudocode includes careful
+        handling of "intermediate terms" and how to transition to next-term
+        windows.
+
+Practical: The implementation collects all voting_history entries from
+           responses and scans higher terms in ascending order. For each
+           candidate term it checks whether any candidate in the requested
+           groups has a historical majority (within the group). The first
+           term with any such candidate causes POTENTIAL_NEXT_LEADERS_DETECTED
+           to be returned.
+
+Significance:
+- Advantage: deterministic and easy to test — ascending scan yields the
+  earliest candidate-term where a historical majority exists.
+- Tradeoff: the paper may include additional constraints (e.g., term
+  dependency across groups, tie-breaking, or particular ordering to build
+  terminal groups) that this simplified scan does not replicate exactly.
+
+4) Terminal groups & early termination
+--------------------------------------
+Paper:  The algorithm accumulates terminal groups and can stop early if a
+        pessimistic quorum or particular terminal-group majorities are detected.
+
+Practical: The helper returns potential leader refs and the caller updates
+           terminal groups. Early-win checks ("majority in all terminal
+           groups") are performed by `flexiraft_leader_election` after each
+           POTENTIAL detection.
+
+Significance:
+- This separation makes control flow explicit: Alg.2 only signals candidate
+  terms/groups; Alg.1 decides whether to stop or continue. It preserves
+  correctness at the cost of relocating some logic from the paper's pseudocode.
+
+5) Robustness and testability
+-----------------------------
+Practical: The implementation intentionally snapshots `responses` and treats
+           `voting_history` as static. This makes the helper well-suited for
+           deterministic unit tests and reproducible integration tests.
+
+Significance:
+- Good for early-stage prototyping and reasoning about the algorithm's
+  behavior. For production-quality consensus, the implementation should be
+  extended to handle dynamic response streams, persistent voter history, and
+  richer tie-breaking as in the original paper.
+
+Recommendations
+---------------
+- If you want a verbatim reproduction of the paper's pseudocode, I can re-
+  implement Alg.2 to follow the paper's stateful loop and side-effects more
+  literally (including explicit terminal-group mutation inside Alg.2).
+- For testing, the current functional closure is easier to unit-test and to
+  integrate into higher-level election logic. If you plan to move to a
+  networked simulation, we should add hooks to update the helper's snapshot
+  with newly arrived `responses` rather than recreating the closure each time.
+
+End

@@ -1,45 +1,99 @@
 import unittest
-from wrapper.flexiraft import FlexiRaftCluster, QuorumConfig
+
+from wrapper.flexiraft import (
+    ReplicaSetTopology,
+    QuorumSpecification,
+    QuorumMode,
+    StaticQuorumOption,
+    GroupRequirement,
+    RequestVoteResponse,
+    VoterInfo,
+    LeaderRef,
+    Alg2Status,
+    ElectionStatus,
+    flexiraft_leader_election,
+)
 
 
-class TestFlexiRaft(unittest.TestCase):
+def rv(voter_id: str, group: str, term: int = 1, granted: bool = True) -> RequestVoteResponse:
+    return RequestVoteResponse(voter=VoterInfo(voter_id, group), term=term, vote_granted=granted, voting_history={})
+
+
+class TestFlexiRaftElection(unittest.TestCase):
     def setUp(self):
-        self.members = ["A", "B", "C", "D", "E"]
-        # Election quorum and commit quorum both include C to guarantee intersection in this test
-        self.qc = QuorumConfig(election={"A", "C", "D"}, commit={"A", "C"})
-        self.cluster = FlexiRaftCluster(self.members, self.qc)
+        # Two groups: G1 with 3 nodes, G2 with 2 nodes
+        self.topo = ReplicaSetTopology(groups={"G1": {"A", "B", "C"}, "G2": {"D", "E"}})
 
-    def test_election_succeeds_with_quorum(self):
-        ok = self.cluster.elect_leader("A")
-        self.assertTrue(ok)
-        self.assertEqual(self.cluster.leader_id, "A")
+    def test_static_quorum_satisfied(self):
+        # Static quorum: majority in G1 is sufficient
+        opt = StaticQuorumOption(requirements=(GroupRequirement(k_of_groups=1, groups=("G1",)),))
+        spec = QuorumSpecification(mode=QuorumMode.STATIC, topology=self.topo, static_options=(opt,))
 
-    def test_commit_majority_in_commit_set(self):
-        self.cluster.elect_leader("A")
-        committed = self.cluster.leader_append_and_commit({"k": 1})
-        self.assertTrue(committed)
-        # committed entries reflect intersection across commit quorum members
-        self.assertEqual(len(self.cluster.committed_entries()), 1)
+        responses = [rv("A", "G1", granted=True), rv("B", "G1", granted=True)]
 
-    def test_reconfigure_quorums_valid(self):
-        # Update to a different but intersecting quorum (still includes C)
-        self.cluster.reconfigure_quorums({"B", "C", "E"}, {"C", "E"})
-        ok = self.cluster.elect_leader("B")
-        self.assertTrue(ok)
-        self.assertEqual(self.cluster.leader_id, "B")
-        committed = self.cluster.leader_append_and_commit("x")
-        self.assertTrue(committed)
+        res = flexiraft_leader_election(
+            current_term=1,
+            responses=responses,
+            quorum_spec=spec,
+            last_known_leader=None,
+            get_potential_next_leaders=lambda t, g: (Alg2Status.WAITING_FOR_MORE_VOTES, t, []),
+        )
 
-    def test_invalid_quorum_outside_members(self):
-        with self.assertRaises(ValueError):
-            self.cluster.reconfigure_quorums({"A", "Z"}, {"A", "C"})
+        self.assertEqual(res.status, ElectionStatus.WON)
 
-    def test_commit_requires_quorum(self):
-        self.cluster.elect_leader("A")
-        # Make commit quorum size 3 to require more acks
-        self.cluster.reconfigure_quorums({"A", "C", "D"}, {"A", "C", "D"})
-        committed = self.cluster.leader_append_and_commit("e1")
-        self.assertTrue(committed)  # leader + two followers reach majority of 3
+    def test_dynamic_pessimistic_quorum(self):
+        # Dynamic mode; require majority in every group (pessimistic quorum) -> all groups must have majorities
+        spec = QuorumSpecification(mode=QuorumMode.DYNAMIC, topology=self.topo)
+
+        # G1 majority: A,B ; G2 majority (size 2): D,E
+        responses = [rv("A", "G1", granted=True), rv("B", "G1", granted=True), rv("D", "G2", granted=True), rv("E", "G2", granted=True)]
+
+        res = flexiraft_leader_election(
+            current_term=1,
+            responses=responses,
+            quorum_spec=spec,
+            last_known_leader=None,
+            get_potential_next_leaders=lambda t, g: (Alg2Status.WAITING_FOR_MORE_VOTES, t, []),
+        )
+
+        self.assertEqual(res.status, ElectionStatus.WON)
+
+    def test_majority_in_last_known_leader_group(self):
+        spec = QuorumSpecification(mode=QuorumMode.DYNAMIC, topology=self.topo)
+        last = LeaderRef(node_id="X", group="G1", term=1)
+
+        # current_term == last.term + 1 -> evaluate majority in last-known-leader group
+        responses = [rv("A", "G1", granted=True), rv("B", "G1", granted=True)]
+
+        res = flexiraft_leader_election(
+            current_term=2,
+            responses=responses,
+            quorum_spec=spec,
+            last_known_leader=last,
+            get_potential_next_leaders=lambda t, g: (Alg2Status.WAITING_FOR_MORE_VOTES, t, []),
+        )
+
+        self.assertEqual(res.status, ElectionStatus.WON)
+
+    def test_waiting_for_more_votes_from_alg2(self):
+        spec = QuorumSpecification(mode=QuorumMode.DYNAMIC, topology=self.topo)
+        last = LeaderRef(node_id="L", group="G1", term=5)
+
+        # current_term not equal to last.term+1 so it will invoke Alg.2 path; stub returns WAITING_FOR_MORE_VOTES
+        responses = [rv("A", "G1", granted=True)]
+
+        def alg2_stub(term_it: int, groups: set):
+            return (Alg2Status.WAITING_FOR_MORE_VOTES, term_it + 1, [])
+
+        res = flexiraft_leader_election(
+            current_term=10,
+            responses=responses,
+            quorum_spec=spec,
+            last_known_leader=last,
+            get_potential_next_leaders=alg2_stub,
+        )
+
+        self.assertEqual(res.status, ElectionStatus.UNDECIDED)
 
 
 if __name__ == "__main__":
