@@ -21,6 +21,7 @@ def insert_novel():
 
 def get_leader(language):
     """Get leader shard of language. For now it only returns one shard, since leader election not implemented.
+    Checks dictionary for shard locations -> check state.json for leader -> return leader path.
 
     :param language: find leader shard of language; always valid(pre-checked)
     :return: relative shard directory path

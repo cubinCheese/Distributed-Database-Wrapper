@@ -1,5 +1,14 @@
 {
   "languages": ["zh", "ja", "ko", "ms", "fil", "id", "km", "th"],
   "nodes": []
-  "shares": []
+  "shards": {
+    "zh": ["node_0"],
+    "ja": ["node_1"],
+    "ko": ["node_2"],
+    "ms": ["node_3"],
+    "fil": ["node_4"],
+    "id": ["node_5"],
+    "km": ["node_6"],
+    "th": ["node_7"]
+  }
 }
