@@ -13,7 +13,7 @@ class Pathfinder:
         :param language: language of novel
         :return: list of nodes
         """
-        return self.config["shards"].get(language, [])
+        return self.config["replicas"].get(language, [])
 
     def convert_to_path(self, node_id, language):
         """Convert parameters to relative folder path
