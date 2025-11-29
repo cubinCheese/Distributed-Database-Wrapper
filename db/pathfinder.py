@@ -37,11 +37,11 @@ class Pathfinder:
         with open(os.path.join(node_path, "state.json")) as f:
             state = json.load(f)
             if state.get("role") == "leader":
-                return node_path
+                return node_path, replica_list[0]
 
             curr_leader = state.get("current_leader")
             if curr_leader and curr_leader in replica_list:
-                return self.convert_to_path(curr_leader, language)
+                return self.convert_to_path(curr_leader, language), curr_leader
 
             return self.find_leader(replica_list, language)
 
@@ -60,6 +60,6 @@ class Pathfinder:
                 with open(state_path, "r") as f:
                     state = json.load(f)
                     if state.get("role") == "leader":
-                        return node_path
+                        return node_path, node
             except FileNotFoundError:
                 continue
