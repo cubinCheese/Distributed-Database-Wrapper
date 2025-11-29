@@ -10,7 +10,7 @@ try:
 except json.JSONDecodeError:
     exit(1)
 
-ALL_NODES = [n for n in config["nodes"]]
+ALL_NODES = config["nodes"]
 ALL_SHARDS = config["shards"]
 
 
