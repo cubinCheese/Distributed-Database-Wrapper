@@ -33,17 +33,20 @@ class Pathfinder:
         """
         replica_list = self.get_nodes(language)
 
-        node_path = self.convert_to_path(replica_list[0], language)
-        with open(os.path.join(node_path, "state.json")) as f:
-            state = json.load(f)
-            if state.get("role") == "leader":
-                return node_path, replica_list[0]
+        try:
+            node_path = self.convert_to_path(replica_list[0], language)
+            with open(os.path.join(node_path, "state.json")) as f:
+                state = json.load(f)
+                if state.get("role") == "leader":
+                    return node_path, replica_list[0]
 
-            curr_leader = state.get("current_leader")
-            if curr_leader and curr_leader in replica_list:
-                return self.convert_to_path(curr_leader, language), curr_leader
+                curr_leader = state.get("current_leader")
+                if curr_leader and curr_leader in replica_list:
+                    return self.convert_to_path(curr_leader, language), curr_leader
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
 
-            return self.find_leader(replica_list, language)
+        return self.find_leader(replica_list, language)
 
     def find_leader(self, replica_list, language):
         """Crawl through list to find leader node (slow)
