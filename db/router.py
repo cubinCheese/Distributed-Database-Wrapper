@@ -1,4 +1,4 @@
-from .pathfinder import Pathfinder
+from pathfinder import Pathfinder
 import os
 import json
 
@@ -113,3 +113,10 @@ class Router:
                     pass
 
             print("Distributed logs updated")
+
+
+if __name__ == "__main__":
+    # Quick Test
+    router = Router()
+
+    print("this ran")

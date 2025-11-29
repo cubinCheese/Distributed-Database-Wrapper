@@ -1,6 +1,6 @@
 {
   "languages": ["zh", "ja", "ko", "ms", "fil", "id", "km", "th"],
-  "nodes": []
+  "nodes": [],
   "shards": {
     "zh": ["node_0"],
     "ja": ["node_1"],
