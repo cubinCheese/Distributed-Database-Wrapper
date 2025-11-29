@@ -1,4 +1,4 @@
-from pathfinder import Pathfinder
+from .pathfinder import Pathfinder
 import os
 import json
 
