@@ -1,4 +1,5 @@
 from pathfinder import Pathfinder
+import sqlite3
 import os
 import json
 
@@ -113,6 +114,24 @@ class Router:
                     pass
 
             print("Distributed logs updated")
+
+    def read_books(self, genre):
+        try:
+            leader_node, state_path = self.client.find_leader(genre)
+            db_path = os.path.join(os.path.dirname(state_path), "novels.db")
+
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "CREATE TABLE IF NOT EXISTS novels (Title, Original Language)"
+            )
+            cursor.execute("SELECT * FROM novels ")
+            results = cursor.fetchall()
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Read Error: {e}")
+            return []
 
 
 if __name__ == "__main__":
