@@ -2,23 +2,23 @@
   "languages": ["zh", "ja", "ko", "ms", "fil", "id", "km", "th"],
   "nodes": ["node_0", "node_1", "node_2", "node_3", "node_4", "node_5", "node_6", "node_7"],
   "shards": {
-    "node_0": ["zh", "th", "ja"],
-    "node_1": ["ja", "zh", "ko"],
-    "node_2": ["ko", "ja", "ms"],
-    "node_3": ["ms", "ko", "fil"],
-    "node_4": ["fil", "ms", "id"],
-    "node_5": ["id", "fil", "km"],
-    "node_6": ["km", "id", "th"],
-    "node_7": ["th", "km", "zh"]
+    "node_0": ["zh", "th", "ja", "km"],
+    "node_1": ["ja", "zh", "ko", "th"],
+    "node_2": ["ko", "ja", "ms", "zh"],
+    "node_3": ["ms", "ko", "fil", "ja"],
+    "node_4": ["fil", "ms", "id", "ko"],
+    "node_5": ["id", "fil", "km", "ms"],
+    "node_6": ["km", "id", "th", "fil"],
+    "node_7": ["th", "km", "zh", "id"]
   },
   "replicas": {
-    "zh": ["node_0", "node_7", "node_1"],
-    "ja": ["node_1", "node_0", "node_2"],
-    "ko": ["node_2", "node_1", "node_3"],
-    "ms": ["node_3", "node_2", "node_4"],
-    "fil": ["node_4", "node_3", "node_5"],
-    "id": ["node_5", "node_4", "node_6"],
-    "km": ["node_6", "node_5", "node_7"],
-    "th": ["node_7", "node_6", "node_0"]
+    "zh": ["node_0", "node_7", "node_1", "node_2"],
+    "ja": ["node_1", "node_0", "node_2", "node_3"],
+    "ko": ["node_2", "node_1", "node_3", "node_4"],
+    "ms": ["node_3", "node_2", "node_4", "node_5"],
+    "fil": ["node_4", "node_3", "node_5", "node_6"],
+    "id": ["node_5", "node_4", "node_6", "node_7"],
+    "km": ["node_6", "node_5", "node_7", "node_0"],
+    "th": ["node_7", "node_6", "node_0", "node_1"]
   }
 }
