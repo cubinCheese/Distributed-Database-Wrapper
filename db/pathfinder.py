@@ -50,6 +50,7 @@ class Pathfinder:
 
     def find_leader(self, replica_list, language):
         """Crawl through list to find leader node (slow)
+        Failsafe traversal
 
         :param replica_list: list of nodes that hold requested content
         :param language: language of novel
