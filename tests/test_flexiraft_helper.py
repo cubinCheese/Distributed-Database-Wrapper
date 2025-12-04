@@ -1,3 +1,15 @@
+# tests/test_flexiraft_helper.py
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from Algorithm1 import (
+    flexiraft_leader_election,
+    QuorumMode, QuorumSpecification, ReplicaSetTopology,
+    StaticQuorumOption, GroupRequirement,
+    VoterInfo, RequestVoteResponse, LeaderRef,
+    ElectionStatus, Alg2Status,
+)
+
 import unittest
 
 from wrapper.flexiraft import (

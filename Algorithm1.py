@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from math import floor
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
+from flexiraft_helper import getPotentialNextLeaders
 
 # ---------- Types & helpers ----------
 
