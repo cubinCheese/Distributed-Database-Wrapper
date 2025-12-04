@@ -1,0 +1,25 @@
+{"term": 1, "index": 1, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Siti Nurbaya", "ms"]}
+{"term": 1, "index": 2, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Penawar Bagi Hati", "ms"]}
+{"term": 1, "index": 3, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Merpati Putih Terbang Lagi", "ms"]}
+{"term": 1, "index": 4, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Tenggelamnya Kapal Van Der Wijck - Part 4", "ms"]}
+{"term": 1, "index": 5, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Panglima Awang", "ms"]}
+{"term": 1, "index": 6, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Siti Nurbaya - Part 5", "ms"]}
+{"term": 1, "index": 7, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Sulalat al-Salatin", "ms"]}
+{"term": 1, "index": 8, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Menara", "ms"]}
+{"term": 1, "index": 9, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Lagenda Budak Setan", "ms"]}
+{"term": 1, "index": 10, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Sejarah Melayu - Part 2", "ms"]}
+{"term": 1, "index": 11, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Hikayat Hang Tuah - Part 1", "ms"]}
+{"term": 1, "index": 12, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Hikayat Hang Tuah", "ms"]}
+{"term": 1, "index": 13, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Hang Jebat Menderhaka", "ms"]}
+{"term": 1, "index": 14, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Tenggelamnya Kapal Van Der Wijck", "ms"]}
+{"term": 1, "index": 15, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Anak Mat Lela Gila", "ms"]}
+{"term": 1, "index": 16, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Interlok", "ms"]}
+{"term": 1, "index": 17, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Leftenan Adnan", "ms"]}
+{"term": 1, "index": 18, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Sejarah Melayu", "ms"]}
+{"term": 1, "index": 19, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Kekasih Electra", "ms"]}
+{"term": 1, "index": 20, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Mat Jenin", "ms"]}
+{"term": 1, "index": 21, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Bidasari", "ms"]}
+{"term": 1, "index": 22, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Gadis Jolobu", "ms"]}
+{"term": 1, "index": 23, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Ranjau Sepanjang Jalan", "ms"]}
+{"term": 1, "index": 24, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Salina", "ms"]}
+{"term": 1, "index": 25, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Sulalat al-Salatin - Part 3", "ms"]}

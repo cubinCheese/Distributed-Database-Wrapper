@@ -7,9 +7,10 @@ Main orchestrator for initialization, election, and data population with detaile
 import argparse
 import sys
 import time
+import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -21,6 +22,7 @@ from db.db_schema import DatabaseSchema
 from db.raft_log_manager import RaftLogManager
 from db.state_manager import StateManager
 from db.flexiraft_coordinator import FlexiRaftCoordinator
+from db.db_daemon import Daemon
 
 
 class DistributedDatabaseOrchestrator:
@@ -32,22 +34,58 @@ class DistributedDatabaseOrchestrator:
         self.election_manager = ElectionManager(config_path)
         self.coordinator = FlexiRaftCoordinator(config_path)
         self.metrics = PopulationMetrics()
+        self.daemons = []  # Track daemon instances
+
+    def start_commit_daemons(self) -> List[Daemon]:
+        """
+        Start commit daemons for all 8 nodes.
+        Daemons will apply raft log entries to databases asynchronously.
+
+        Returns: List of daemon instances
+        """
+        node_ids = [
+            "node_0",
+            "node_1",
+            "node_2",
+            "node_3",
+            "node_4",
+            "node_5",
+            "node_6",
+            "node_7",
+        ]
+
+        for node_id in node_ids:
+            daemon = Daemon(node_id)
+            daemon.start()
+            self.daemons.append(daemon)
+
+        return self.daemons
+
+    def stop_daemons(self):
+        """Stop all running daemons"""
+        for daemon in self.daemons:
+            daemon.stop()
 
     def populate_language_group(
-        self, language: str, novels: List[Dict], leader_id: str
+        self, language: str, novels: List[Dict], leader_id: Optional[str] = None
     ) -> Tuple[bool, int, str]:
         """
-        Populate a single language group with data using 2/4 quorum
+        Populate a single language group with data using 2/4 quorum.
+        Writes only to raft logs; daemon applies to databases asynchronously.
 
         Args:
             language: Language code
             novels: List of novel dictionaries
-            leader_id: Leader node ID for this language
+            leader_id: Leader node ID (if None, will trigger on-demand election)
 
         Returns: (success, count, message)
         """
         if not novels:
             return (True, 0, "No data")
+
+        # ON-DEMAND ELECTION: Ensure leader exists
+        if not leader_id:
+            leader_id, term = self.election_manager.ensure_leader_for_language(language)
 
         replicas = self.coordinator.get_replica_nodes(language)
         leader_path = self.coordinator.get_shard_path(leader_id, language)
@@ -75,6 +113,7 @@ class DistributedDatabaseOrchestrator:
 
             # Append to raft logs in parallel
             success_count = 0
+            successful_replicas = []
             failed_nodes = []
 
             with ThreadPoolExecutor(max_workers=4) as executor:
@@ -92,43 +131,28 @@ class DistributedDatabaseOrchestrator:
                     try:
                         future.result()
                         success_count += 1
+                        successful_replicas.append(node_id)
                     except Exception as e:
                         failed_nodes.append(node_id)
 
             latency = time.time() - start_time
 
-            # Check quorum (need 2 out of 4)
-            if success_count >= 2:
-                # Quorum reached! Apply to databases
-                leader_db = DatabaseSchema.get_db_path(leader_path)
-                commit_index = StateManager.get_commit_index(leader_path)
-                new_commit_index = commit_index + len(entries)
+            # Check 2/4 quorum using coordinator
+            if self.coordinator.check_write_quorum(language, successful_replicas):
+                # Quorum reached! Update commit_index for successful replicas
+                # The daemon will apply these entries to the databases
+                leader_commit_index = StateManager.get_commit_index(leader_path)
+                new_commit_index = leader_commit_index + len(entries)
 
-                # Leader: sync application
-                DatabaseSchema.bulk_insert_novels(
-                    leader_db, [(n["title"], n["original_language"]) for n in novels]
-                )
-                StateManager.update_commit_index_sync(leader_path, new_commit_index)
-
-                # Followers: async application
-                with ThreadPoolExecutor(max_workers=3) as executor:
-                    for node_id in replicas:
-                        if node_id != leader_id:
-                            shard_path = self.coordinator.get_shard_path(
-                                node_id, language
-                            )
-                            follower_db = DatabaseSchema.get_db_path(shard_path)
-
-                            executor.submit(
-                                DatabaseSchema.bulk_insert_novels,
-                                follower_db,
-                                [(n["title"], n["original_language"]) for n in novels],
-                            )
-                            executor.submit(
-                                StateManager.update_commit_index_async,
-                                shard_path,
-                                new_commit_index,
-                            )
+                # Update commit_index for replicas that successfully wrote to log
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    for node_id in successful_replicas:
+                        shard_path = self.coordinator.get_shard_path(node_id, language)
+                        executor.submit(
+                            StateManager.update_commit_index_sync,
+                            shard_path,
+                            new_commit_index,
+                        )
 
                 # Record metrics
                 self.metrics.record_write(
@@ -162,29 +186,36 @@ class DistributedDatabaseOrchestrator:
         return (False, 0, f"Quorum failed after {max_retries} retries")
 
     def populate_all_parallel(
-        self, grouped_novels: Dict[str, List[Dict]], leaders: Dict[str, Tuple[str, int]]
+        self,
+        grouped_novels: Dict[str, List[Dict]],
+        leaders: Optional[Dict[str, Tuple[str, int]]] = None,
     ) -> Dict[str, Tuple[bool, int, str]]:
         """
-        Populate all language groups in parallel
+        Populate all language groups in parallel.
+        If leaders dict is not provided, will trigger on-demand elections.
 
         Args:
             grouped_novels: {language: [novels]}
-            leaders: {language: (leader_id, term)}
+            leaders: Optional {language: (leader_id, term)} dict
 
         Returns: {language: (success, count, message)}
         """
         results = {}
+        leaders = leaders or {}  # Default to empty dict if None
 
         with ThreadPoolExecutor(max_workers=8) as executor:
             futures = {}
 
             for language, novels in grouped_novels.items():
-                if language in leaders:
-                    leader_id, _ = leaders[language]
-                    future = executor.submit(
-                        self.populate_language_group, language, novels, leader_id
-                    )
-                    futures[future] = language
+                # Get leader if available, otherwise None (will trigger on-demand election)
+                leader_id = (
+                    leaders.get(language, (None, 0))[0] if language in leaders else None
+                )
+
+                future = executor.submit(
+                    self.populate_language_group, language, novels, leader_id
+                )
+                futures[future] = language
 
             for future in as_completed(futures):
                 lang = futures[future]
@@ -298,22 +329,34 @@ def main():
 
     print("=" * 70)
     print("DISTRIBUTED DATABASE WITH FLEXIRAFT")
-    print("Configuration: 8 languages, 4 replicas each, 2/4 quorum")
+    print("Configuration: 8 languages, 4 replicas each, 2/4 quorum (STATIC)")
     print("=" * 70)
 
     orchestrator = DistributedDatabaseOrchestrator()
 
     # STEP 1: INITIALIZATION
     if not args.skip_init:
-        print("\n[1/4] Initializing system...")
+        print("\n[1/5] Initializing system...")
         success = orchestrator.initializer.initialize_all(verbose=True)
         if not success:
             print("ERROR: Initialization failed")
             return 1
 
-    # STEP 2: LEADER ELECTIONS
+    # STEP 2: START COMMIT DAEMONS
+    print("\n[2/5] Starting commit daemons for all nodes...")
+    daemons = orchestrator.start_commit_daemons()
+    print(f"✓ Started {len(daemons)} commit daemons (will apply logs to databases)")
+    print("  Daemon check interval: ~2 seconds")
+
+    # Give daemons time to initialize
+    time.sleep(1)
+
+    # STEP 3: LEADER ELECTIONS (OPTIONAL - will auto-elect if needed)
+    leaders = {}
     if not args.skip_election:
-        print("\n[2/4] Starting FlexiRaft leader elections (parallel)...")
+        print(
+            "\n[3/5] Pre-electing leaders (optional, will auto-elect on-demand if needed)..."
+        )
         start_time = time.time()
 
         leaders = orchestrator.election_manager.elect_all_leaders_parallel()
@@ -325,8 +368,7 @@ def main():
             leader_id, term = leaders[lang]
             print(f"  {lang:6s} → {leader_id:8s} (term {term})")
     else:
-        # Load existing leaders
-        leaders = {}
+        # Load existing leaders if available
         for lang in orchestrator.coordinator.get_all_languages():
             leader_id = orchestrator.coordinator.get_leader_for_language(lang)
             if leader_id:
@@ -334,8 +376,13 @@ def main():
                 term = StateManager.get_term(shard_path)
                 leaders[lang] = (leader_id, term)
 
-    # STEP 3: CSV LOADING
-    print("\n[3/4] Loading CSV data...")
+        if not leaders:
+            print(
+                "  Note: No pre-elected leaders. Will elect on-demand during population."
+            )
+
+    # STEP 4: CSV LOADING
+    print("\n[4/5] Loading CSV data...")
     csv_path = args.csv
 
     if args.generate_sample or not Path(csv_path).exists():
@@ -352,13 +399,18 @@ def main():
     grouped = CSVLoader.group_by_language(novels)
     print(f"  Distribution: {dict((k, len(v)) for k, v in grouped.items())}")
 
-    # STEP 4: DATA POPULATION
-    print("\n[4/4] Populating shards (parallel, 2/4 quorum)...")
-    print("Progress will be reported every ~250 entries\n")
+    # STEP 5: DATA POPULATION
+    print("\n[5/5] Populating shards (parallel, 2/4 quorum, daemon-based writes)...")
+    print("  Writes go to raft logs; daemons apply to databases asynchronously")
+    print("  Progress will be reported every ~250 entries\n")
 
     start_time = time.time()
     results = orchestrator.populate_all_parallel(grouped, leaders)
     elapsed = time.time() - start_time
+
+    # Give daemons time to apply entries to databases
+    print("\n⏳ Waiting 5 seconds for daemons to apply entries to databases...")
+    time.sleep(5)
 
     # FINAL SUMMARY
     print("\n" + "=" * 70)

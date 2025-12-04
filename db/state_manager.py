@@ -45,7 +45,7 @@ class StateManager:
             "term": term,
             "voted_for": None,
             "commit_index": 0,
-            "last_applied": 0,
+            "last_applied": 0,  # Track which entries have been applied to DB
             "current_leader": None,
             "voting_history": {},
             "last_heartbeat": None,
@@ -307,6 +307,38 @@ class StateManager:
         """Get last heartbeat timestamp"""
         state = StateManager.load_state(shard_path)
         return state.get("last_heartbeat") if state else None
+
+    @staticmethod
+    def get_last_applied(shard_path: str) -> int:
+        """Get last applied index"""
+        state = StateManager.load_state(shard_path)
+        return state.get("last_applied", 0) if state else 0
+
+    @staticmethod
+    def update_last_applied(
+        shard_path: str, index: int, sync: bool = True
+    ) -> Optional[threading.Thread]:
+        """
+        Update last_applied index
+
+        Args:
+            shard_path: Path to shard directory
+            index: New last_applied value
+            sync: If True, update synchronously; if False, asynchronously
+
+        Returns: Thread handle if async, None if sync
+        """
+        state = StateManager.load_state(shard_path)
+        if state is None:
+            return None
+
+        state["last_applied"] = index
+
+        if sync:
+            StateManager.save_state_sync(shard_path, state)
+            return None
+        else:
+            return StateManager.save_state_async(shard_path, state)
 
 
 # Convenience function for backward compatibility

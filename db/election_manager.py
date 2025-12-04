@@ -118,6 +118,32 @@ class ElectionManager:
             f"Failed to elect leader for {language} after {attempt} attempts"
         )
 
+    def ensure_leader_for_language(self, language: str) -> Tuple[str, int]:
+        """
+        Ensure a leader exists for a language group.
+        Triggers election only if no valid leader exists.
+
+        Args:
+            language: Language code
+
+        Returns: (leader_id, term)
+        """
+        # Check if leader already exists
+        current_leader = self.coordinator.get_leader_for_language(language)
+
+        if current_leader:
+            # Verify leader is valid (has state file)
+            shard_path = self.coordinator.get_shard_path(current_leader, language)
+            state = StateManager.load_state(shard_path)
+
+            if state and state.get("role") == "leader":
+                term = state.get("term", 0)
+                return (current_leader, term)
+
+        # No valid leader, trigger election
+        print(f"  ⚡ Triggering on-demand election for {language}...")
+        return self.elect_leader_for_group(language)
+
     def elect_all_leaders_parallel(self) -> Dict[str, Tuple[str, int]]:
         """
         Elect leaders for all 8 language groups in parallel

@@ -62,12 +62,26 @@ class FlexiRaftCoordinator:
 
     def create_quorum_spec(self) -> QuorumSpecification:
         """
-        Create QuorumSpecification with DYNAMIC mode
-        This enables flexible quorum (2/4 requirement)
+        Create QuorumSpecification with STATIC mode for 2/4 quorum
+        Combined with modified majority_count (returns 2 for n=4),
+        this achieves 2 out of 4 replicas requirement.
 
-        Returns: QuorumSpecification for dynamic mode
+        Returns: QuorumSpecification for static mode
         """
-        return QuorumSpecification(mode=QuorumMode.DYNAMIC, topology=self.topology)
+        from wrapper.flexiraft import StaticQuorumOption, GroupRequirement
+
+        # For single-group topology (each language is one group with 4 replicas)
+        # Require majority in 1 group, where majority = 2/4 (via modified majority_count)
+        # Note: This creates a generic static quorum that will be evaluated per-language
+        static_option = StaticQuorumOption(
+            requirements=tuple()  # Requirements will be built per-election
+        )
+
+        return QuorumSpecification(
+            mode=QuorumMode.STATIC,
+            topology=self.topology,
+            static_options=(static_option,),
+        )
 
     def get_shard_path(self, node_id: str, language: str) -> str:
         """Get path to a specific shard"""
@@ -172,8 +186,17 @@ class FlexiRaftCoordinator:
         # We only want to check majority in THIS language group
         replicas = set(self.get_replica_nodes(language))
         single_group_topology = ReplicaSetTopology(groups={language: replicas})
+
+        # Build static quorum spec for 2/4 requirement
+        from wrapper.flexiraft import StaticQuorumOption, GroupRequirement
+
+        static_option = StaticQuorumOption(
+            requirements=(GroupRequirement(k_of_groups=1, groups=(language,)),)
+        )
         single_group_quorum_spec = QuorumSpecification(
-            mode=QuorumMode.DYNAMIC, topology=single_group_topology
+            mode=QuorumMode.STATIC,
+            topology=single_group_topology,
+            static_options=(static_option,),
         )
 
         # Build algorithm 2 function for this election
@@ -189,6 +212,18 @@ class FlexiRaftCoordinator:
         )
 
         return result
+
+    def check_write_quorum(self, language: str, successful_replicas: List[str]) -> bool:
+        """
+        Check if write quorum (2/4) is satisfied
+
+        Args:
+            language: Language group
+            successful_replicas: List of replica IDs that wrote successfully
+
+        Returns: True if quorum satisfied (>= 2 replicas)
+        """
+        return len(successful_replicas) >= 2
 
     def get_replica_nodes(self, language: str) -> List[str]:
         """Get list of node IDs that replicate a language"""

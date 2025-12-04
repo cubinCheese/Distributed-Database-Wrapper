@@ -5,7 +5,8 @@ import threading
 import time
 
 try:
-    with open("node_config.json", "r") as f:
+    config_path = os.path.join(os.path.dirname(__file__), "node_config.json")
+    with open(config_path, "r") as f:
         config = json.load(f)
 except json.JSONDecodeError:
     exit(1)
@@ -19,36 +20,72 @@ class Daemon:
         self._node_id = node_id
         self.running = True
         self.threads = []
+        # Set base path for db directory
+        self.base_path = os.path.join(os.path.dirname(__file__), node_id)
 
     def execute_log_entry(self, shard_path, entry):
         db_path = os.path.join(shard_path, "novel.db")
 
-        if "command" not in entry or "sql" not in entry["command"]:
+        # FIX: Use direct entry structure (not nested in "command")
+        sql = entry.get("sql", "")
+        params = tuple(entry.get("params", []))
+
+        if not sql:
             return
 
-        sql = entry["command"]["sql"]
-        params = tuple(entry["command"]["params"])
-
         conn = sqlite3.connect(db_path)
-
         cursor = conn.cursor()
-        cursor.execute("CREATE TABLE IF NOT EXISTS novels (Title, Original Language)")
+
+        # FIX: Use proper schema matching db_schema.py
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS novels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                original_language TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         try:
             cursor.execute(sql, params)
             conn.commit()
         except Exception as e:
-            print(f"SQL Error: {e}")
+            print(f"SQL Error in {shard_path}: {e}")
         finally:
             conn.close()
 
     def check_shard(self, shard_name):
-        shard_path = os.path.join(self._node_id, shard_name)
+        shard_path = os.path.join(self.base_path, shard_name)
+        state_path = os.path.join(shard_path, "state.json")
         log_path = os.path.join(shard_path, "raft_log.json")
 
-        if not os.path.exists(log_path):
+        if not os.path.exists(log_path) or not os.path.exists(state_path):
             return
 
+        # Load state
+        try:
+            with open(state_path, "r") as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return
+
+        commit_index = state.get("commit_index", 0)
+        last_applied = state.get("last_applied", 0)
+
+        # ADD HEARTBEAT: If this shard is a leader, update heartbeat
+        if state.get("role") == "leader":
+            state["last_heartbeat"] = time.time()
+            try:
+                with open(state_path, "w") as f:
+                    json.dump(state, f, indent=2)
+            except Exception:
+                pass  # Ignore heartbeat write failures
+
+        # No new entries to apply
+        if commit_index <= last_applied:
+            return
+
+        # Read log entries
         log_entries = []
         try:
             with open(log_path, "r") as f:
@@ -58,34 +95,21 @@ class Daemon:
         except (json.JSONDecodeError, FileNotFoundError):
             return
 
-        applied_index_path = os.path.join(shard_path, "last_applied.txt")
-        last_applied = 0
-        if os.path.exists(applied_index_path):
-            with open(applied_index_path, "r") as f:
-                try:
-                    last_applied = int(f.read().strip())
-                except ValueError:
-                    last_applied = 0
-        state_path = os.path.join(shard_path, "state.json")
-        commit_index = 0
+        # Apply entries from last_applied+1 to commit_index
+        for entry in log_entries:
+            entry_index = entry.get("index", 0)
 
-        if os.path.exists(state_path):
-            try:
-                with open(state_path, "r") as f:
-                    state = json.load(f)
-                    commit_index = state.get("commit_index", 0)
-            except Exception:
-                pass
-
-        safety_boundary = min(len(log_entries), commit_index)
-
-        if safety_boundary > last_applied:
-            for i in range(last_applied, safety_boundary):
-                entry = log_entries[i]
+            if last_applied < entry_index <= commit_index:
                 self.execute_log_entry(shard_path, entry)
+                last_applied = entry_index
 
-                with open(applied_index_path, "w") as f:
-                    f.write(str(i + 1))
+                # Update last_applied in state
+                state["last_applied"] = last_applied
+                try:
+                    with open(state_path, "w") as f:
+                        json.dump(state, f, indent=2)
+                except Exception as e:
+                    print(f"Error updating last_applied in {shard_path}: {e}")
 
     def start_shard_worker(self, shard_name):
         while self.running:

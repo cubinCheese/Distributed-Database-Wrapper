@@ -81,7 +81,7 @@ class RecoveryDaemon:
         self, language: str, replica_id: str, leader_id: str
     ) -> int:
         """
-        Recover a lagging replica by pulling from raft log
+        Recover a lagging replica by pulling from leader's raft log
 
         Args:
             language: Language code
@@ -93,39 +93,28 @@ class RecoveryDaemon:
         replica_path = self.coordinator.get_shard_path(replica_id, language)
         leader_path = self.coordinator.get_shard_path(leader_id, language)
 
-        # Get commit indices
-        replica_commit = StateManager.get_commit_index(replica_path)
-        leader_commit = StateManager.get_commit_index(leader_path)
+        # Get last_applied indices
+        replica_last_applied = StateManager.get_last_applied(replica_path)
+        leader_last_applied = StateManager.get_last_applied(leader_path)
 
-        if replica_commit >= leader_commit:
+        if replica_last_applied >= leader_last_applied:
             return 0  # Already up to date
 
-        # Load raft logs
-        replica_log = RaftLogManager.load_log(replica_path)
-        leader_log = RaftLogManager.load_log(leader_path)
+        # Get commit indices
+        leader_commit = StateManager.get_commit_index(leader_path)
 
-        recovered = 0
+        # Copy missing entries from leader's log
+        recovered = RaftLogManager.copy_entries_to_follower(
+            leader_path=leader_path,
+            follower_path=replica_path,
+            start_index=replica_last_applied + 1,
+            end_index=leader_commit,
+        )
 
-        # Apply missing committed entries
-        for entry in leader_log.get("entries", []):
-            entry_index = entry.get("index", 0)
-
-            if replica_commit < entry_index <= leader_commit:
-                # This entry is committed on leader but not on replica
-                operation = entry.get("operation")
-                if operation and operation.get("type") == "INSERT":
-                    # Apply to database
-                    db_path = DatabaseSchema.get_db_path(replica_path)
-                    DatabaseSchema.insert_novel(db_path, operation.get("data", {}))
-
-                    # Append to replica's raft log
-                    RaftLogManager.append_entry(replica_path, entry)
-
-                    recovered += 1
-
-        # Update replica's commit index
+        # Update replica's commit_index to match leader
         if recovered > 0:
             StateManager.update_commit_index_sync(replica_path, leader_commit)
+            print(f"  ✓ Recovered {recovered} entries for {replica_id} ({language})")
 
         return recovered
 
@@ -139,6 +128,11 @@ class RecoveryDaemon:
         Returns: Dict of {replica_id: entries_recovered}
         """
         results = {}
+
+        # Detect recently recovered nodes
+        recovered_nodes = self.detect_recovered_nodes(language)
+        if recovered_nodes:
+            print(f"🔄 Detected recovered nodes for {language}: {recovered_nodes}")
 
         # Check leader health
         if not self.check_leader_health(language):
@@ -185,6 +179,41 @@ class RecoveryDaemon:
                     print(f"✓ Recovered {recovered} entries for {replica_id}")
 
         return results
+
+    def detect_recovered_nodes(self, language: str) -> List[str]:
+        """
+        Detect replicas that have recently come back online
+        (state file exists but last_applied is far behind leader)
+
+        Returns: List of recovered node IDs
+        """
+        leader_id = self.coordinator.get_leader_for_language(language)
+        if not leader_id:
+            return []
+
+        leader_path = self.coordinator.get_shard_path(leader_id, language)
+        leader_last_applied = StateManager.get_last_applied(leader_path)
+
+        recovered = []
+        replicas = self.coordinator.get_replica_nodes(language)
+
+        for replica_id in replicas:
+            if replica_id == leader_id:
+                continue
+
+            replica_path = self.coordinator.get_shard_path(replica_id, language)
+            state = StateManager.load_state(replica_path)
+
+            if not state:
+                continue  # Still offline
+
+            replica_last_applied = state.get("last_applied", 0)
+
+            # Consider "recovered" if more than 10 entries behind
+            if leader_last_applied - replica_last_applied > 10:
+                recovered.append(replica_id)
+
+        return recovered
 
     def recovery_cycle(self) -> None:
         """Run one recovery cycle for all language groups"""
