@@ -10,6 +10,55 @@
 - **Raft Log Recovery**: Pull-based synchronization for lagging replicas
 - **Detailed Metrics**: Progress reports every 250 entries
 
+## Normal Execution
+```bash
+python main.py --generate-sample --num-records 10000
+```
+
+## Test Execution
+**1-replica failure**
+```bash
+python test_crash_recovery.py --num-records 500 --crash-count 1
+```
+
+**2-replica failure** -> both followers (pass)
+```bash
+python test_crash_recovery.py --num-records 500 --crash-count 2
+```
+
+**2-replica failure** -> leader crash (fail)
+```bash
+python test_crash_recovery.py --num-records 500 --leader-crash
+```
+
+**3-replica failure** -> fail condition
+```bash
+python test_shard_death.py
+```
+
+## Project Architecture
+
+```
+[CSV File] 
+    ↓
+[main.py] → Reads novels, determines shard by language
+    ↓
+[Election Manager] → Ensures leader exists (on-demand)
+    ↓
+[Write to Raft Logs] → Parallel writes to 4 replicas
+    ↓
+[Check 2/4 Quorum] → Did 2+ replicas succeed?
+    ↓ YES
+[Update commit_index] → Mark entries as committed
+    ↓
+[Commit Daemon] → (Background, every ~2s)
+    ├─ Reads commit_index and last_applied
+    ├─ Applies entries to SQLite
+    └─ Updates last_applied
+```
+
+---
+
 ### **Write Flow:**
 
 1. **CSV Item Read** → Determine shard by `original_language`
@@ -55,26 +104,5 @@
 - **Recovery time**: Typically <30s for 100 entries
 
 
----
 
-### Project Architecture
-
-```
-[CSV File] 
-    ↓
-[main.py] → Reads novels, determines shard by language
-    ↓
-[Election Manager] → Ensures leader exists (on-demand)
-    ↓
-[Write to Raft Logs] → Parallel writes to 4 replicas
-    ↓
-[Check 2/4 Quorum] → Did 2+ replicas succeed?
-    ↓ YES
-[Update commit_index] → Mark entries as committed
-    ↓
-[Commit Daemon] → (Background, every ~2s)
-    ├─ Reads commit_index and last_applied
-    ├─ Applies entries to SQLite
-    └─ Updates last_applied
-```
 
