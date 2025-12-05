@@ -409,7 +409,7 @@ def main():
     elapsed = time.time() - start_time
 
     # Give daemons time to apply entries to databases
-    print("\n⏳ Waiting 5 seconds for daemons to apply entries to databases...")
+    print("\nWaiting 5 seconds for daemons to apply entries to databases...")
     time.sleep(5)
 
     # FINAL SUMMARY
