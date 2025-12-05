@@ -345,7 +345,7 @@ def main():
     # STEP 2: START COMMIT DAEMONS
     print("\n[2/5] Starting commit daemons for all nodes...")
     daemons = orchestrator.start_commit_daemons()
-    print(f"✓ Started {len(daemons)} commit daemons (will apply logs to databases)")
+    print(f"  Started {len(daemons)} commit daemons (will apply logs to databases)")
     print("  Daemon check interval: ~2 seconds")
 
     # Give daemons time to initialize
@@ -362,7 +362,7 @@ def main():
         leaders = orchestrator.election_manager.elect_all_leaders_parallel()
 
         elapsed = time.time() - start_time
-        print(f"✓ Elections completed in {elapsed:.2f}s")
+        print(f"  Elections completed in {elapsed:.2f}s")
         print("\nElected Leaders:")
         for lang in sorted(leaders.keys()):
             leader_id, term = leaders[lang]
@@ -394,7 +394,7 @@ def main():
         return 1
 
     novels = CSVLoader.load_csv(csv_path)
-    print(f"✓ Loaded {len(novels)} novels from CSV")
+    print(f"  Loaded {len(novels)} novels from CSV")
 
     grouped = CSVLoader.group_by_language(novels)
     print(f"  Distribution: {dict((k, len(v)) for k, v in grouped.items())}")
@@ -437,7 +437,7 @@ def main():
     for lang in sorted(results.keys()):
         success, count, message = results[lang]
         attempted = len(grouped.get(lang, []))
-        status = "✓" if success else "✗"
+        status = "T" if success else "F"
         print(f"  {lang:<10} {attempted:<10,} {count:<10,} {status:<10}")
 
     print("\n" + "=" * 70)
