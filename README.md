@@ -1,6 +1,4 @@
-# Distributed Database with FlexiRaft Consensus
-
-A toy distributed database implementing FlexiRaft consensus with sharding and replication.
+# Distributed Databases
 
 ## Features
 
@@ -12,148 +10,77 @@ A toy distributed database implementing FlexiRaft consensus with sharding and re
 - **Raft Log Recovery**: Pull-based synchronization for lagging replicas
 - **Detailed Metrics**: Progress reports every 250 entries
 
-## Quick Start
+### **Write Flow:**
 
-### 1. Test Components
+1. **CSV Item Read** → Determine shard by `original_language`
+2. **Check Leader** → Trigger election if no leader exists
+3. **Parallel Log Writes** → Write to raft logs on all 4 replicas
+4. **Quorum Check** → Did 2+ replicas succeed?
+   - **YES**: Update `commit_index` in state.json
+   - **NO**: Retry up to 5 times
+5. **Daemon Application** (background, every ~2s):
+   - Read `state.json` to get `commit_index` and `last_applied`
+   - Apply entries where `last_applied < index <= commit_index`
+   - Write to SQLite database
+   - Update `last_applied` in state.json
 
-```bash
-python3 test_components.py
-```
+### **Leader Heartbeats:**
 
-This verifies all core components work:
-- System initialization (32 shards)
-- CSV generation and loading
-- Database operations
-- Raft log management
-- State management
+- Commit daemon checks each shard every ~2 seconds
+- If shard is a leader, updates `last_heartbeat` timestamp
+- Recovery daemon uses this to detect dead leaders
 
-### 2. Run Full System (Simple Test - 100 records)
+### **Recovery on Node Return:**
 
-```bash
-# Generate sample data and populate
-python3 main.py --generate-sample --num-records 100
-```
+1. Node comes back online (state.json reappears)
+2. Recovery daemon detects node is >10 entries behind leader
+3. Automatically copies missing entries from leader's raft log
+4. Updates `commit_index` to match leader
+5. Commit daemon applies entries to database
 
-**Note**: The full system with elections may take time. For testing, use the component test above.
+---
 
-### 3. Reset System
+## Key Metrics
 
-```bash
-python3 reset_system.py --yes
-```
+### **Quorum Behavior:**
 
-## Architecture
+- **Minimum for write**: 2/4 replicas (50%)
+- **Typical**: 3/4 or 4/4 (depending on network)
+- **Failure tolerance**: Can lose 2 replicas and still write
 
-```
-32 Shards = 8 Languages × 4 Replicas
+### **Latency:**
 
-Languages: zh, ja, ko, ms, fil, id, km, th
-Nodes: node_0 through node_7
+- **Log write**: ~0.1-0.5s (parallel writes to 4 replicas)
+- **Database application**: ~2-5s (daemon applies asynchronously)
+- **Total latency**: ~2-6s from write to database
 
-Example for Chinese (zh):
-  Replicas: node_0, node_7, node_1, node_2
-  Quorum: Any 2 of 4 replicas must agree for writes
-```
+### **Consistency:**
 
-## Key Components
+- **Strong consistency**: Among voting replicas (2+)
+- **Eventual consistency**: For non-voting replicas
+- **Recovery time**: Typically <30s for 100 entries
 
-### Core Modules
 
-- **db/raft_log_manager.py**: Raft log operations with ghost entry support
-- **db/state_manager.py**: State management (sync for leader, async for followers)
-- **db/db_schema.py**: SQLite schema and operations
-- **db/csv_loader.py**: CSV parsing and sample data generation
-- **db/initialize_system.py**: System initialization (32 shards)
-- **db/flexiraft_coordinator.py**: FlexiRaft consensus bridge
-- **db/election_manager.py**: Parallel leader elections
-- **main.py**: Main orchestrator with metrics
-- **reset_system.py**: System reset utility
+---
 
-### FlexiRaft Integration
-
-Uses the existing FlexiRaft implementation:
-- **wrapper/flexiraft.py**: Core FlexiRaft algorithm
-- **wrapper/flexiraft_helper.py**: Algorithm 2 (getPotentialNextLeaders)
-
-## File Structure
+### Project Architecture
 
 ```
-db/
-  node_0/ through node_7/     # 8 nodes
-    zh/, ja/, ko/, ...        # Language shards
-      novel.db                # SQLite database
-      state.json              # Raft state
-      raft_log.json           # Operation log
-  node_config.json            # System configuration
+[CSV File] 
+    ↓
+[main.py] → Reads novels, determines shard by language
+    ↓
+[Election Manager] → Ensures leader exists (on-demand)
+    ↓
+[Write to Raft Logs] → Parallel writes to 4 replicas
+    ↓
+[Check 2/4 Quorum] → Did 2+ replicas succeed?
+    ↓ YES
+[Update commit_index] → Mark entries as committed
+    ↓
+[Commit Daemon] → (Background, every ~2s)
+    ├─ Reads commit_index and last_applied
+    ├─ Applies entries to SQLite
+    └─ Updates last_applied
 ```
 
-## Testing
-
-### Component Tests
-```bash
-python3 test_components.py
-```
-
-### Reset and Reinitialize
-```bash
-python3 reset_system.py --yes
-python3 main.py --generate-sample --num-records 1000
-```
-
-## Configuration
-
-Edit `db/node_config.json` to modify:
-- Languages supported
-- Node assignments
-- Replica distribution
-
-## Requirements
-
-- Python 3.8+
-- SQLite3
-- No external dependencies (uses standard library)
-
-## Technical Details
-
-### Quorum System
-- **Mode**: Dynamic (FlexiRaft)
-- **Requirement**: 2 out of 4 replicas
-- **Write Process**:
-  1. Leader appends to raft log
-  2. Parallel append to all replicas
-  3. Check quorum (2/4)
-  4. If quorum: apply to databases
-  5. If failed: retry 5 times, then leave ghost entries
-
-### Ghost Entries
-- Uncommitted raft log entries from failed writes
-- Not rolled back (left in place)
-- Overwritten on next successful write
-- Standard Raft log reconciliation
-
-### Metrics
-- Progress reports every 250 entries
-- Average quorum success rate
-- Average latency per batch
-- Per-language statistics
-- Shard distribution
-
-## Troubleshooting
-
-### Elections Hang
-The election process uses infinite retries. For testing, use:
-```bash
-python3 test_components.py  # Tests without elections
-```
-
-### Database Locked
-Reset the system:
-```bash
-python3 reset_system.py --yes
-```
-
-### Import Errors
-Type checker warnings are normal and don't affect runtime. Run tests to verify:
-```bash
-python3 test_components.py
-```
