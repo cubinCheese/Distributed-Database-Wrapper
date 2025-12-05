@@ -46,13 +46,7 @@
 
 - **Minimum for write**: 2/4 replicas (50%)
 - **Typical**: 3/4 or 4/4 (depending on network)
-- **Failure tolerance**: Can lose 2 replicas and still write
-
-### **Latency:**
-
-- **Log write**: ~0.1-0.5s (parallel writes to 4 replicas)
-- **Database application**: ~2-5s (daemon applies asynchronously)
-- **Total latency**: ~2-6s from write to database
+- **Failure tolerance**: Can lose 1 replica and still write
 
 ### **Consistency:**
 
