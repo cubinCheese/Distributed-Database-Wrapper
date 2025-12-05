@@ -19,6 +19,7 @@ Notes/assumptions:
 - `voting_history` in each response maps term->candidate_id (node id string).
 - Candidate -> group mapping is inferred from `topo`.
 """
+
 from __future__ import annotations
 from collections import defaultdict
 from typing import Iterable, Set, Tuple, List, Dict, Callable
@@ -44,7 +45,9 @@ def _candidate_group_map(topo: ReplicaSetTopology) -> Dict[str, str]:
     return m
 
 
-def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopology) -> Alg2Fn:
+def make_alg2_fn(
+    responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopology
+) -> Alg2Fn:
     """Return an Alg2Fn closure using the provided `responses` and `topo`.
 
     The returned function has signature (term_it: int, possible_leader_groups: Set[str]) ->
@@ -70,7 +73,9 @@ def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopol
         return counts
 
     # Build historical votes mapping: term -> group -> set(candidate_ids)
-    term_group_candidates: Dict[int, Dict[str, Dict[str, int]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+    term_group_candidates: Dict[int, Dict[str, Dict[str, int]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(int))
+    )
     for r in resp_list:
         # Each voter's voting_history maps term -> candidate_id
         for t, cand in r.voting_history.items():
@@ -80,12 +85,14 @@ def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopol
                 continue
             term_group_candidates[t][g][cand] += 1
 
-    def GetPotentialNextLeaders(term_it: int, possible_leader_groups: Set[str]) -> Tuple[Alg2Status, int, List[LeaderRef]]:
+    def GetPotentialNextLeaders(
+        term_it: int, possible_leader_groups: Set[str]
+    ) -> Tuple[Alg2Status, int, List[LeaderRef]]:
         # 1) WAITING: if any possible group still could reach a majority based on current responses
         counts = current_group_counts()
         for g in possible_leader_groups:
             granted, responded, size = counts[g]
-            needed = majority_count(size)
+            needed = majority_count(size, for_election=True)
             # If we have not yet reached majority but remaining non-respondents could still provide votes,
             # we should wait for more votes (no safe inference yet).
             if granted < needed and (granted + (size - responded)) >= needed:
@@ -104,15 +111,21 @@ def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopol
                     continue
                 # find if any candidate id reached majority within this group
                 size = topo.group_size(g)
-                needed = majority_count(size)
+                needed = majority_count(size, for_election=True)
                 # group_info maps candidate_id -> votes (counts of voters who historically voted for them)
                 for cand_id, vcount in group_info.items():
                     if vcount >= needed:
-                        leader_refs.append(LeaderRef(node_id=cand_id, group=g, term=cand_term))
+                        leader_refs.append(
+                            LeaderRef(node_id=cand_id, group=g, term=cand_term)
+                        )
                         break
 
             if leader_refs:
-                return Alg2Status.POTENTIAL_NEXT_LEADERS_DETECTED, cand_term, leader_refs
+                return (
+                    Alg2Status.POTENTIAL_NEXT_LEADERS_DETECTED,
+                    cand_term,
+                    leader_refs,
+                )
 
         # If we examined all higher terms and found no leaders, treat as defunct.
         return Alg2Status.ALL_INTERMEDIATE_TERMS_DEFUNCT, -1, []
@@ -121,7 +134,9 @@ def make_alg2_fn(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopol
 
 
 # Backwards-compatible name expected by earlier code / paper pseudocode
-def getPotentialNextLeaders(responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopology) -> Alg2Fn:
+def getPotentialNextLeaders(
+    responses: Iterable[RequestVoteResponse], topo: ReplicaSetTopology
+) -> Alg2Fn:
     """Alias for make_alg2_fn to match paper naming / earlier code.
 
     Returns a callable (term_it, possible_leader_groups) -> (status, next_term, leader_refs).

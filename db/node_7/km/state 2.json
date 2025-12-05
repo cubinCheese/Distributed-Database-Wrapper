@@ -1,0 +1,13 @@
+{
+  "node_id": "node_7",
+  "language": "km",
+  "role": "follower",
+  "term": 2,
+  "voted_for": null,
+  "commit_index": 0,
+  "last_applied": 0,
+  "current_leader": "node_5",
+  "voting_history": {},
+  "last_heartbeat": null,
+  "election_timeout": 10.0
+}

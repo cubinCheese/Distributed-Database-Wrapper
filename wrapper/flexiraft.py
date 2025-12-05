@@ -1,7 +1,8 @@
 # flexiraft_election.py
 #
-# MODIFICATION NOTE: majority_count() has been modified to return 2 for n=4
-# to support 2/4 quorum instead of standard 3/4 majority.
+# MODIFICATION NOTE: majority_count() has been modified to support separate quorums:
+# - Election quorum: 3/4 (true majority) - required for leader election
+# - Write quorum: 2/4 - required for write operations
 # This is a project-specific customization for the distributed database.
 #
 from __future__ import annotations
@@ -13,14 +14,23 @@ from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 # ---------- Types & helpers ----------
 
 
-def majority_count(n: int) -> int:
+def majority_count(n: int, for_election: bool = False) -> int:
     """
     Smallest integer strictly greater than n/2.
-    Special case: For n=4, return 2 to enable 2/4 quorum.
+
+    Args:
+        n: The number of replicas
+        for_election: If True, returns true majority (3/4 for n=4).
+                     If False, returns write quorum (2/4 for n=4).
+
+    Special case: For n=4, returns 2 for write quorum, 3 for election quorum.
     """
-    if n == 4:
-        return 2  # Modified for 2/4 quorum requirement
-    return (n // 2) + 1
+    if for_election:
+        return (n // 2) + 1  # True majority: 3/4 for n=4
+    else:
+        if n == 4:
+            return 2  # Write quorum: 2/4 for n=4
+        return (n // 2) + 1
 
 
 @dataclass(frozen=True)
@@ -128,7 +138,7 @@ class CountView:
 
     @property
     def needed(self) -> int:
-        return majority_count(self.size)
+        return majority_count(self.size, for_election=True)
 
     @property
     def satisfied(self) -> bool:

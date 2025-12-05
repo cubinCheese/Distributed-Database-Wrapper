@@ -23,6 +23,12 @@ from db.raft_log_manager import RaftLogManager
 from db.state_manager import StateManager
 from db.flexiraft_coordinator import FlexiRaftCoordinator
 from db.db_daemon import Daemon
+from db.shard_monitor import ShardMonitor
+from db.consistency_checker import (
+    generate_consistency_report,
+    write_consistency_report,
+    write_test_header,
+)
 
 
 class DistributedDatabaseOrchestrator:
@@ -35,6 +41,8 @@ class DistributedDatabaseOrchestrator:
         self.coordinator = FlexiRaftCoordinator(config_path)
         self.metrics = PopulationMetrics()
         self.daemons = []  # Track daemon instances
+        self.shard_monitor = ShardMonitor(config_path)  # Track shard health
+        self.recovery_daemon = None  # Recovery daemon instance
 
     def start_commit_daemons(self) -> List[Daemon]:
         """
@@ -65,6 +73,74 @@ class DistributedDatabaseOrchestrator:
         """Stop all running daemons"""
         for daemon in self.daemons:
             daemon.stop()
+
+    def get_daemon(self, node_id: str):
+        """Get daemon instance by node_id"""
+        for daemon in self.daemons:
+            if daemon._node_id == node_id:
+                return daemon
+        return None
+
+    def pause_node(self, node_id: str):
+        """Pause daemon for a specific node (simulate crash)"""
+        daemon = self.get_daemon(node_id)
+        if daemon:
+            shards = daemon.get_shards()
+            daemon.pause()
+            self.shard_monitor.register_crash(node_id)
+            self._check_for_shard_death()  # Check immediately
+            return True, shards
+        return False, []
+
+    def resume_node(self, node_id: str):
+        """Resume daemon for a specific node (simulate recovery)"""
+        daemon = self.get_daemon(node_id)
+        if daemon:
+            shards = daemon.get_shards()
+            daemon.resume()
+            self.shard_monitor.register_recovery(node_id)
+            return True, shards
+        return False, []
+
+    def _check_for_shard_death(self):
+        """Check if any shards have died and terminate if so"""
+        dead_shards = self.shard_monitor.get_dead_shards()
+
+        if dead_shards:
+            # Print to terminal
+            report = self.shard_monitor.format_death_report(dead_shards)
+            print("\n" + report)
+
+            # Write to report.log
+            with open("report.log", "w") as f:
+                f.write(report)
+            print("\nShard death report written to: report.log")
+
+            # Gracefully terminate
+            print("\nShutting down system...")
+            self.stop_daemons()
+            if self.recovery_daemon:
+                self.stop_recovery_daemon()
+
+            sys.exit(1)
+
+    def start_recovery_daemon(self, check_interval: int = 8):
+        """Start recovery daemon to auto-detect and recover crashed nodes"""
+        from db.recovery_daemon import RecoveryDaemon
+
+        self.recovery_daemon = RecoveryDaemon(
+            config_path=self.config_path,
+            check_interval=check_interval,
+            leader_timeout=10,
+            shard_monitor=self.shard_monitor,
+        )
+        self.recovery_daemon.start()
+        return self.recovery_daemon
+
+    def stop_recovery_daemon(self):
+        """Stop recovery daemon"""
+        if self.recovery_daemon:
+            self.recovery_daemon.stop()
 
     def populate_language_group(
         self, language: str, novels: List[Dict], leader_id: Optional[str] = None
@@ -166,7 +242,17 @@ class DistributedDatabaseOrchestrator:
 
                 return (True, len(novels), f"Quorum {success_count}/4, {latency:.2f}s")
 
-            # Quorum not reached
+            # Quorum not reached - check if shard is dead before retrying
+            is_healthy, avail_count, avail_nodes = (
+                self.shard_monitor.check_shard_health(language)
+            )
+
+            if not is_healthy:
+                print(
+                    f"\nCRITICAL: Shard '{language}' is dead ({avail_count}/4 replicas available)"
+                )
+                self._check_for_shard_death()  # This will terminate
+
             if attempt < max_retries - 1:
                 print(
                     f"    Retry {attempt + 1}/{max_retries} for {language} (quorum: {success_count}/4)"
@@ -408,9 +494,55 @@ def main():
     results = orchestrator.populate_all_parallel(grouped, leaders)
     elapsed = time.time() - start_time
 
-    # Give daemons time to apply entries to databases
-    print("\nWaiting 5 seconds for daemons to apply entries to databases...")
-    time.sleep(5)
+    # Wait for daemons to apply all entries (active polling)
+    print("\nWaiting for daemons to apply entries to databases...")
+    max_wait = 60  # Max 60 seconds
+    check_interval = 3  # Check every 3 seconds (aligned with daemon interval)
+
+    def check_all_shards_applied(coordinator):
+        """
+        Check if all shards have applied all committed entries.
+        Returns (all_synced, synced_count, total_count)
+        """
+        languages = coordinator.get_all_languages()
+        total_shards = 0
+        synced_shards = 0
+
+        for language in languages:
+            replicas = coordinator.config.get("replicas", {}).get(language, [])
+            for node_id in replicas:
+                shard_path = coordinator.get_shard_path(node_id, language)
+                state = StateManager.load_state(shard_path)
+
+                if state:
+                    total_shards += 1
+                    commit_index = state.get("commit_index", 0)
+                    last_applied = state.get("last_applied", 0)
+
+                    # Shard is synced if last_applied caught up to commit_index
+                    if last_applied >= commit_index:
+                        synced_shards += 1
+
+        return synced_shards == total_shards, synced_shards, total_shards
+
+    # Active polling loop
+    for i in range(max_wait // check_interval):
+        time.sleep(check_interval)
+
+        all_synced, synced, total = check_all_shards_applied(orchestrator.coordinator)
+
+        if all_synced:
+            elapsed_wait = (i + 1) * check_interval
+            print(f"  ✓ All {total} shards synced after {elapsed_wait}s")
+            break
+        else:
+            print(f"  Progress: {synced}/{total} shards synced...")
+    else:
+        # Timeout reached
+        all_synced, synced, total = check_all_shards_applied(orchestrator.coordinator)
+        print(f"  ⚠ Timeout after {max_wait}s: {synced}/{total} shards synced")
+        if synced < total:
+            print(f"  Warning: {total - synced} shards may still be applying entries")
 
     # FINAL SUMMARY
     print("\n" + "=" * 70)
@@ -437,8 +569,29 @@ def main():
     for lang in sorted(results.keys()):
         success, count, message = results[lang]
         attempted = len(grouped.get(lang, []))
-        status = "T" if success else "F"
+        status = "P" if success else "NP"
         print(f"  {lang:<10} {attempted:<10,} {count:<10,} {status:<10}")
+
+    # CONSISTENCY CHECK
+    print("\nGenerating consistency report...")
+
+    # Write test header
+    test_params = {
+        "csv_file": args.csv,
+        "num_records": len(novels),
+        "skip_election": args.skip_election,
+        "throughput": f"{total_success / elapsed:.1f} entries/sec"
+        if total_success > 0 and elapsed > 0
+        else "N/A",
+    }
+    write_test_header("report.log", "DATA POPULATION TEST", test_params, mode="w")
+
+    # Write consistency report
+    report = generate_consistency_report(orchestrator.config_path)
+    write_consistency_report(
+        report, "report.log", mode="a", section_header="AFTER POPULATION"
+    )
+    print("Logged: report.log")
 
     print("\n" + "=" * 70)
     print("SYSTEM READY")

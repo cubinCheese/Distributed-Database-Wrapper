@@ -1,0 +1,6 @@
+{"term": 1, "index": 1, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Stay Alive, My Son", "km"]}
+{"term": 1, "index": 2, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["The Gate", "km"]}
+{"term": 1, "index": 3, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["The Lost Executioner", "km"]}
+{"term": 1, "index": 4, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["First They Killed My Father", "km"]}
+{"term": 1, "index": 5, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["In the Shadow of the Banyan", "km"]}
+{"term": 1, "index": 6, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Never Fall Down", "km"]}

@@ -22,6 +22,9 @@ class Daemon:
         self.threads = []
         # Set base path for db directory
         self.base_path = os.path.join(os.path.dirname(__file__), node_id)
+        # Pause mechanism for crash simulation
+        self.paused = False
+        self.pause_lock = threading.Lock()
 
     def execute_log_entry(self, shard_path, entry):
         db_path = os.path.join(shard_path, "novel.db")
@@ -113,10 +116,16 @@ class Daemon:
 
     def start_shard_worker(self, shard_name):
         while self.running:
+            # Check if paused (simulating crash)
+            with self.pause_lock:
+                if self.paused:
+                    time.sleep(0.5)
+                    continue
+
             try:
                 self.check_shard(shard_name)
             except Exception as e:
-                print(f"crash in {shard_name}: {e}")
+                print(f"Daemon crash in {shard_name}: {e}")
 
             time.sleep(2)
 
@@ -137,6 +146,25 @@ class Daemon:
             t.join()
 
         print(f"[{self._node_id}] all threads joined")
+
+    def pause(self):
+        """Pause all daemon workers (simulates node crash)"""
+        with self.pause_lock:
+            self.paused = True
+
+    def resume(self):
+        """Resume all daemon workers (simulates node recovery)"""
+        with self.pause_lock:
+            self.paused = False
+
+    def is_paused(self) -> bool:
+        """Check if daemon is currently paused"""
+        with self.pause_lock:
+            return self.paused
+
+    def get_shards(self):
+        """Get list of shards managed by this daemon"""
+        return ALL_SHARDS.get(self._node_id, [])
 
 
 def spin_cluster():

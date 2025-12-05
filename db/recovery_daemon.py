@@ -27,6 +27,7 @@ class RecoveryDaemon:
         config_path: str = "db/node_config.json",
         check_interval: int = 30,
         leader_timeout: int = 10,
+        shard_monitor=None,
     ):
         """
         Initialize recovery daemon
@@ -35,12 +36,17 @@ class RecoveryDaemon:
             config_path: Path to node configuration
             check_interval: Seconds between recovery checks
             leader_timeout: Seconds before declaring leader dead
+            shard_monitor: Optional ShardMonitor instance to check for crashed nodes
         """
         self.config_path = config_path
         self.check_interval = check_interval
         self.leader_timeout = leader_timeout
-        self.coordinator = FlexiRaftCoordinator(config_path)
-        self.election_manager = ElectionManager(config_path)
+        self.coordinator = FlexiRaftCoordinator(
+            config_path, shard_monitor=shard_monitor
+        )
+        self.election_manager = ElectionManager(
+            config_path, shard_monitor=shard_monitor
+        )
         self.running = False
         self.thread = None
         self.executor = ThreadPoolExecutor(max_workers=8)
@@ -57,7 +63,7 @@ class RecoveryDaemon:
         leader_id = self.coordinator.get_leader_for_language(language)
 
         if not leader_id:
-            print(f"⚠ No leader for {language}")
+            print(f"[{language}] No leader for {language}")
             return False
 
         # Check leader's last heartbeat
@@ -65,13 +71,13 @@ class RecoveryDaemon:
         last_heartbeat = StateManager.get_last_heartbeat(shard_path)
 
         if last_heartbeat is None:
-            print(f"⚠ No heartbeat recorded for leader {leader_id} ({language})")
+            print(f"[{language}] No heartbeat recorded for leader {leader_id}")
             return False
 
         elapsed = time.time() - last_heartbeat
         if elapsed > self.leader_timeout:
             print(
-                f"⚠ Leader {leader_id} ({language}) timeout: {elapsed:.1f}s since last heartbeat"
+                f"[{language}] Leader {leader_id} timeout: {elapsed:.1f}s since last heartbeat"
             )
             return False
 
@@ -103,6 +109,13 @@ class RecoveryDaemon:
         # Get commit indices
         leader_commit = StateManager.get_commit_index(leader_path)
 
+        lag = leader_commit - replica_last_applied
+
+        if lag <= 0:
+            return 0
+
+        print(f"  [{language}] Pulling {lag} entries: {leader_id} -> {replica_id}")
+
         # Copy missing entries from leader's log
         recovered = RaftLogManager.copy_entries_to_follower(
             leader_path=leader_path,
@@ -114,7 +127,11 @@ class RecoveryDaemon:
         # Update replica's commit_index to match leader
         if recovered > 0:
             StateManager.update_commit_index_sync(replica_path, leader_commit)
-            print(f"  ✓ Recovered {recovered} entries for {replica_id} ({language})")
+            print(f"  [{language}] Copied {recovered} log entries to {replica_id}")
+            print(
+                f"  [{language}] commit_index updated: {replica_last_applied} -> {leader_commit}"
+            )
+            print(f"  [{language}] Daemon will apply entries to database")
 
         return recovered
 
@@ -132,21 +149,19 @@ class RecoveryDaemon:
         # Detect recently recovered nodes
         recovered_nodes = self.detect_recovered_nodes(language)
         if recovered_nodes:
-            print(f"🔄 Detected recovered nodes for {language}: {recovered_nodes}")
+            print(f"\n[{language}] Detected recovered nodes: {recovered_nodes}")
 
         # Check leader health
         if not self.check_leader_health(language):
             # Leader unhealthy, trigger reelection
-            print(f"🔄 Triggering reelection for {language}")
+            print(f"[{language}] Triggering reelection for {language}")
             try:
                 new_leader, term = self.election_manager.trigger_reelection(
                     language, reason="leader_timeout"
                 )
-                print(
-                    f"✓ New leader elected for {language}: {new_leader} (term {term})"
-                )
+                print(f"[{language}] New leader elected: {new_leader} (term {term})")
             except Exception as e:
-                print(f"✗ Reelection failed for {language}: {e}")
+                print(f"[{language}] Reelection failed: {e}")
                 return results
 
         leader_id = self.coordinator.get_leader_for_language(language)
@@ -169,21 +184,20 @@ class RecoveryDaemon:
             lag = leader_commit - replica_commit
 
             if lag > 0:
-                print(f"📥 Recovering {replica_id} ({language}): {lag} entries behind")
+                print(
+                    f"\n[{language}] Recovering {replica_id}: {lag} entries behind leader"
+                )
                 recovered = self.recover_lagging_replica(
                     language, replica_id, leader_id
                 )
                 results[replica_id] = recovered
-
-                if recovered > 0:
-                    print(f"✓ Recovered {recovered} entries for {replica_id}")
 
         return results
 
     def detect_recovered_nodes(self, language: str) -> List[str]:
         """
         Detect replicas that have recently come back online
-        (state file exists but last_applied is far behind leader)
+        (commit_index > last_applied, indicating daemon was paused)
 
         Returns: List of recovered node IDs
         """
@@ -207,10 +221,15 @@ class RecoveryDaemon:
             if not state:
                 continue  # Still offline
 
+            replica_commit = state.get("commit_index", 0)
             replica_last_applied = state.get("last_applied", 0)
 
-            # Consider "recovered" if more than 10 entries behind
-            if leader_last_applied - replica_last_applied > 10:
+            # Detect if commit_index exists but last_applied is behind
+            # This indicates daemon was paused/crashed
+            lag = replica_commit - replica_last_applied
+
+            # Consider "recovered" if more than 3 entries not applied (lowered threshold)
+            if lag > 3:
                 recovered.append(replica_id)
 
         return recovered
@@ -235,51 +254,51 @@ class RecoveryDaemon:
                 if results:
                     total_recovered += sum(results.values())
             except Exception as e:
-                print(f"✗ Recovery failed for {lang}: {e}")
+                print(f"[{lang}] Recovery failed: {e}")
 
         if total_recovered > 0:
-            print(f"✓ Recovery complete: {total_recovered} total entries recovered")
+            print(f"Recovery complete: {total_recovered} total entries recovered")
         else:
-            print("✓ All replicas up to date")
+            print("All replicas up to date")
 
     def run(self) -> None:
         """Main daemon loop"""
         print(
-            f"🚀 Recovery daemon started (check_interval={self.check_interval}s, leader_timeout={self.leader_timeout}s)"
+            f"Recovery daemon started (check_interval={self.check_interval}s, leader_timeout={self.leader_timeout}s)"
         )
 
         while self.running:
             try:
                 self.recovery_cycle()
             except Exception as e:
-                print(f"✗ Recovery cycle error: {e}")
+                print(f"Recovery cycle error: {e}")
 
             # Sleep until next cycle
             time.sleep(self.check_interval)
 
-        print("🛑 Recovery daemon stopped")
+        print("Recovery daemon stopped")
 
     def start(self) -> None:
         """Start daemon in background thread"""
         if self.running:
-            print("⚠ Daemon already running")
+            print("Daemon already running")
             return
 
         self.running = True
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
-        print(f"✓ Recovery daemon started in background (PID: {os.getpid()})")
+        print(f"Recovery daemon started in background (PID: {os.getpid()})")
 
     def stop(self) -> None:
         """Stop daemon"""
         if not self.running:
-            print("⚠ Daemon not running")
+            print("Daemon not running")
             return
 
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
-        print("✓ Recovery daemon stopped")
+        print("Recovery daemon stopped")
 
 
 # Convenience functions

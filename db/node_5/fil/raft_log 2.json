@@ -1,0 +1,6 @@
+{"term": 1, "index": 1, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Noli Me Tangere", "fil"]}
+{"term": 1, "index": 2, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["El Filibusterismo", "fil"]}
+{"term": 1, "index": 3, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Florante at Laura", "fil"]}
+{"term": 1, "index": 4, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Luha ng Buwaya", "fil"]}
+{"term": 1, "index": 5, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Dekada '70", "fil"]}
+{"term": 1, "index": 6, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Banaag at Sikat", "fil"]}

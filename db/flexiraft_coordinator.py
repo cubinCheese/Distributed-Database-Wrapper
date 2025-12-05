@@ -28,18 +28,20 @@ from db.state_manager import StateManager
 class FlexiRaftCoordinator:
     """Coordinates FlexiRaft operations for the distributed database"""
 
-    def __init__(self, config_path: str = "db/node_config.json"):
+    def __init__(self, config_path: str = "db/node_config.json", shard_monitor=None):
         """
         Initialize coordinator with configuration
 
         Args:
             config_path: Path to node configuration JSON
+            shard_monitor: Optional ShardMonitor instance to check for crashed nodes
         """
         self.config_path = config_path
         self.config = self._load_config()
         self.base_path = os.path.dirname(config_path)
         self.topology = self.build_topology_from_config()
         self.quorum_spec = self.create_quorum_spec()
+        self.shard_monitor = shard_monitor
 
     def _load_config(self) -> Dict:
         """Load node configuration"""
@@ -101,6 +103,15 @@ class FlexiRaftCoordinator:
 
         Returns: RequestVoteResponse based on current state
         """
+        # Check if node is crashed/paused - crashed nodes can't vote
+        if self.shard_monitor and self.shard_monitor.is_node_crashed(voter_node_id):
+            return RequestVoteResponse(
+                voter=VoterInfo(voter_node_id, language),
+                term=term,
+                vote_granted=False,
+                voting_history={},
+            )
+
         shard_path = self.get_shard_path(voter_node_id, language)
         state = StateManager.load_state(shard_path)
 

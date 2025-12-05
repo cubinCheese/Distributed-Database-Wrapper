@@ -1,0 +1,6 @@
+{"term": 1, "index": 1, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Tenggelamnya Kapal Van Der Wijck", "ms"]}
+{"term": 1, "index": 2, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Siti Nurbaya", "ms"]}
+{"term": 1, "index": 3, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Sejarah Melayu", "ms"]}
+{"term": 1, "index": 4, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Hikayat Hang Tuah", "ms"]}
+{"term": 1, "index": 5, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Sulalat al-Salatin", "ms"]}
+{"term": 1, "index": 6, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Salina", "ms"]}

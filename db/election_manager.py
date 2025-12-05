@@ -20,15 +20,18 @@ from db.state_manager import StateManager
 class ElectionManager:
     """Manages parallel leader elections for all language groups"""
 
-    def __init__(self, config_path: str = "db/node_config.json"):
+    def __init__(self, config_path: str = "db/node_config.json", shard_monitor=None):
         """
         Initialize election manager
 
         Args:
             config_path: Path to node configuration JSON
+            shard_monitor: Optional ShardMonitor instance to check for crashed nodes
         """
         self.config_path = config_path
-        self.coordinator = FlexiRaftCoordinator(config_path)
+        self.coordinator = FlexiRaftCoordinator(
+            config_path, shard_monitor=shard_monitor
+        )
         self.executor = ThreadPoolExecutor(max_workers=8)
 
     def elect_leader_for_group(

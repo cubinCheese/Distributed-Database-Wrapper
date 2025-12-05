@@ -1,0 +1,6 @@
+{"term": 1, "index": 1, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Bumi Manusia", "id"]}
+{"term": 1, "index": 2, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Perburuan", "id"]}
+{"term": 1, "index": 3, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Siti Nurbaya", "id"]}
+{"term": 1, "index": 4, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Jejak Langkah", "id"]}
+{"term": 1, "index": 5, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Rumah Kaca", "id"]}
+{"term": 1, "index": 6, "operation": "INSERT", "sql": "INSERT INTO novels (title, original_language) VALUES (?, ?)", "params": ["Anak Semua Bangsa", "id"]}

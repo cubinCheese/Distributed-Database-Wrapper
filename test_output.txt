@@ -1,0 +1,115 @@
+======================================================================
+CRASH RECOVERY TEST
+======================================================================
+
+[1/7] Initializing system...
+System initialized (32 shards)
+
+[2/7] Starting daemons...
+Started 8 commit daemons
+
+[3/7] Starting recovery daemon...
+Recovery daemon started (check_interval=3s, leader_timeout=10s)
+
+=== Recovery Cycle at 21:46:20 ===
+Recovery daemon started in background (PID: 99814)
+Recovery daemon started (check interval: 3s)
+[ja] No leader for ja
+[ja] Triggering reelection for ja
+Triggering reelection for ja (reason: leader_timeout)
+[ko] No leader for ko
+[ko] Triggering reelection for ko
+Triggering reelection for ko (reason: leader_timeout)
+[zh] No leader for zh
+[zh] Triggering reelection for zh
+Triggering reelection for zh (reason: leader_timeout)
+[id] No leader for id
+[id] Triggering reelection for id
+Triggering reelection for id (reason: leader_timeout)
+[fil] No leader for fil
+[fil] Triggering reelection for fil
+Triggering reelection for fil (reason: leader_timeout)
+[ms] No leader for ms
+[ms] Triggering reelection for ms
+Triggering reelection for ms (reason: leader_timeout)
+[km] No leader for km
+[km] Triggering reelection for km
+Triggering reelection for km (reason: leader_timeout)
+[th] No leader for th
+[th] Triggering reelection for th
+Triggering reelection for th (reason: leader_timeout)
+[ja] New leader elected: node_1 (term 1)
+[th] New leader elected: node_1 (term 1)
+[id] New leader elected: node_4 (term 1)
+[ms] New leader elected: node_2 (term 1)
+[zh] New leader elected: node_2 (term 1)
+[fil] New leader elected: node_3 (term 1)
+[km] New leader elected: node_6 (term 1)
+[ko] New leader elected: node_2 (term 1)
+All replicas up to date
+
+[4/7] Electing leaders...
+Elected leaders for 8 languages
+
+[5/7] Planning crashes (1 nodes):
+  Crash 1: node_0 will crash at entry 120/200 (60%)
+    Affected shards: zh, th, ja, km
+    Will recover at entry 183 (91%)
+
+[6/7] Populating 200 records (crashes will occur mid-run)...
+Generated sample CSV: test_crash_dataset.csv (200 records)
+
+Population complete (0.02s)
+  Successfully written: 200 entries
+
+[7/7] Recovering any remaining crashed nodes...
+
+Waiting 5s for active daemons to apply entries...
+
+CRASH EVENT at entry 200: node_0 PAUSED
+  Affected shards: zh, th, ja, km
+
+RECOVERY EVENT at entry 200: node_0 RESUMED
+  Affected shards: zh, th, ja, km
+  Recovery daemon will detect lag in next cycle (3s)
+
+=== Recovery Cycle at 21:46:23 ===
+All replicas up to date
+
+=== Recovery Cycle at 21:46:26 ===
+All replicas up to date
+
+Generating consistency report (BEFORE full recovery)...
+
+Waiting 16s for recovery daemon cycles...
+
+=== Recovery Cycle at 21:46:29 ===
+All replicas up to date
+
+=== Recovery Cycle at 21:46:32 ===
+All replicas up to date
+
+=== Recovery Cycle at 21:46:35 ===
+All replicas up to date
+
+=== Recovery Cycle at 21:46:38 ===
+All replicas up to date
+
+=== Recovery Cycle at 21:46:41 ===
+All replicas up to date
+
+Generating consistency report (AFTER recovery)...
+
+======================================================================
+TEST RESULT
+======================================================================
+Status: PASSED
+  All 8 shards are fully consistent after recovery
+
+Crash Details:
+  Crashed nodes: ['node_0']
+  Recovery daemon interval: 3s
+  Test duration: 21.0s
+======================================================================
+
+Logged: report.log

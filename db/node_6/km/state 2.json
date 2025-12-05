@@ -1,0 +1,15 @@
+{
+  "node_id": "node_6",
+  "language": "km",
+  "role": "leader",
+  "term": 1,
+  "voted_for": "node_6",
+  "commit_index": 6,
+  "last_applied": 6,
+  "current_leader": "node_6",
+  "voting_history": {
+    "1": "node_6"
+  },
+  "last_heartbeat": 1764913752.998176,
+  "election_timeout": 10.0
+}
