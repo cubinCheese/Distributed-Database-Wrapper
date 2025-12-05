@@ -157,15 +157,3 @@ Type checker warnings are normal and don't affect runtime. Run tests to verify:
 ```bash
 python3 test_components.py
 ```
-
-## Future Enhancements
-
-- Health monitoring daemon
-- Recovery daemon for lagging replicas
-- Query interface with leader routing
-- Network simulation
-- Performance benchmarks with 10k+ records
-
-## License
-
-Educational/Research use
