@@ -1,5 +1,8 @@
 # Distributed Databases
 
+# Preview Research Report [[Full Research Report](https://github.com/cubinCheese/Distributed-Database-Wrapper/blob/main/Research_Report.pdf)]
+<img width="800" height="1294" alt="image" src="https://github.com/user-attachments/assets/5e975a1e-1100-4c22-aa3e-d66623e9e53f" />
+
 ## Features
 
 - **8 Shard Groups**: One per language (zh, ja, ko, ms, fil, id, km, th)
@@ -102,7 +105,4 @@ python test_shard_death.py
 - **Strong consistency**: Among voting replicas (2+)
 - **Eventual consistency**: For non-voting replicas
 - **Recovery time**: Typically <30s for 100 entries
-
-
-
 
